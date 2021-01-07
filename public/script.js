@@ -1,6 +1,7 @@
 const videoGrid = document.getElementById("video-grid");
 const myVideo = document.createElement("video");
 myVideo.muted = true;
+const peers = {};
 
 navigator.mediaDevices
   .getUserMedia({
@@ -9,6 +10,20 @@ navigator.mediaDevices
   })
   .then((stream) => {
     addVideoStream(myVideo, stream);
+
+    socket.on("user-connected", (userId) => {
+      connectToNewUser(userId, stream);
+    });
+    console.log("in my own");
+    myPeer.on("call", (call) => {
+      console.log("in call??");
+      call.answer(stream);
+
+      const video = document.createElement("video");
+      call.on("stream", (userVideoStream) => {
+        addVideoStream(video, userVideoStream);
+      });
+    });
   });
 
 const socket = io("/");
@@ -21,8 +36,24 @@ myPeer.on("open", (id) => {
   socket.emit("join-room", ROOM_ID, id);
 });
 
-socket.on("user-connected", (userId) => {
-  console.log("user connected====", userId);
+function connectToNewUser(userId, stream) {
+  const call = myPeer.call(userId, stream);
+  const video = document.createElement("video");
+  console.log("connecting to new user???");
+  call.on("stream", (userVideoStream) => {
+    addVideoStream(video, userVideoStream);
+  });
+
+  call.on("close", () => {
+    video.remove();
+  });
+
+  peers[userId] = call;
+}
+
+socket.on("user-disconnected", (userId) => {
+  console.log("peers----", peers);
+  peers[userId].close();
 });
 
 function addVideoStream(video, stream) {
@@ -30,6 +61,5 @@ function addVideoStream(video, stream) {
   video.addEventListener("loadedmetadata", () => {
     video.play();
   });
-  console.log("video----", video);
   videoGrid.append(video);
 }
